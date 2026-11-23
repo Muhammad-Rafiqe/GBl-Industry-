@@ -24,6 +24,8 @@ IMPORTANT:
 from flask import Flask, render_template_string, request, redirect, url_for, flash
 from datetime import datetime
 import os
+import sqlite3
+import json
 
 app = Flask(__name__)
 app.secret_key = os.environ.get(
@@ -1787,11 +1789,10 @@ p {
 
                 <div class="product-bottom">
                     <span>Specification on enquiry</span>
-                    <button
-                        type="button"
-                        class="details-button"
-                        data-product-id="{{ product.id }}"
-                    >View details ↗</button>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <button type="button" class="details-button" data-product-id="{{ product.id }}">View details ↗</button>
+                        <button type="button" class="details-button add-cart-button" data-product-id="{{ product.id }}">Add to enquiry cart +</button>
+                    </div>
                 </div>
             </div>
         </article>
@@ -1979,6 +1980,20 @@ p {
 </section>
 
 <!-- ============================================================
+     ENQUIRY CART
+     ============================================================ -->
+<section class="section container" id="cart">
+  <div class="section-heading"><div><div class="eyebrow">YOUR SELECTION</div><h2>Enquiry cart</h2><p class="section-intro">Add permitted catalogue items and submit your requirements for a quotation. Prices are confirmed individually; no prices are invented here.</p></div></div>
+  <div style="background:#f3f7fa;border:1px solid #e3ebf0;border-radius:12px;padding:22px">
+    <div id="cartItems"><p>Your enquiry cart is empty.</p></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:15px">
+      <strong id="cartCount">0 items selected</strong>
+      <button type="button" class="btn btn-outline-dark" id="clearCart">Clear cart</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
      CONTACT SECTION
      ============================================================ -->
 <section class="section section-soft" id="contact">
@@ -2054,8 +2069,16 @@ p {
                 </select>
             </div>
 
+            <div class="form-row">
+                <div class="form-field"><label for="phone">Phone / WhatsApp *</label><input id="phone" name="phone" required maxlength="40" placeholder="Your contact number"></div>
+                <div class="form-field"><label for="city">City *</label><input id="city" name="city" required maxlength="100" placeholder="City"></div>
+            </div>
+            <div class="form-field"><label for="address">Delivery / Business Address *</label><input id="address" name="address" required maxlength="300" placeholder="Street, building, postcode"></div>
+            <div class="form-field"><label for="country">Country *</label><input id="country" name="country" required maxlength="100" placeholder="Country"></div>
+            <input type="hidden" id="selectedProducts" name="selected_products" value="[]">
+
             <div class="form-field">
-                <label for="message">Message *</label>
+                <label for="message">Message / Intended application *</label>
                 <textarea
                     id="message"
                     name="message"
@@ -2069,11 +2092,7 @@ p {
                 Submit Enquiry ↗
             </button>
 
-            <small class="form-note">
-                Demo form only. It does not send or store messages.
-                Connect a secure email service before publishing this website.
-                Do not submit confidential information.
-            </small>
+            <small class="form-note">Your enquiry is saved to the website database for the site owner to review. A quotation and supply eligibility are subject to product, destination and regulatory checks. Do not submit sensitive personal information.</small>
         </form>
     </div>
 </section>
@@ -2396,6 +2415,47 @@ document.querySelectorAll("img").forEach(function (imageElement) {
 });
 
 /* ================================================================
+   ENQUIRY CART — browser-side selection
+   ================================================================ */
+const enquiryCart = {};
+const cartItemsBox = document.getElementById("cartItems");
+const cartCountLabel = document.getElementById("cartCount");
+const selectedProductsInput = document.getElementById("selectedProducts");
+function renderCart() {
+    const ids = Object.keys(enquiryCart);
+    cartItemsBox.innerHTML = "";
+    if (!ids.length) { cartItemsBox.innerHTML = "<p>Your enquiry cart is empty.</p>"; }
+    ids.forEach(function(id) {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #dce6ec;align-items:center;flex-wrap:wrap";
+        const title = document.createElement("strong"); title.textContent = enquiryCart[id].name;
+        const qty = document.createElement("span"); qty.textContent = "Quantity: " + enquiryCart[id].quantity;
+        const controls = document.createElement("div"); controls.style.cssText = "display:flex;gap:8px;align-items:center";
+        [["−",-1],["+",1],["Remove",0]].forEach(function(pair) {
+            const b=document.createElement("button"); b.type="button"; b.textContent=pair[0]; b.className="details-button";
+            b.addEventListener("click",function(){ if(pair[1]===0 || enquiryCart[id].quantity+pair[1]<1) delete enquiryCart[id]; else enquiryCart[id].quantity+=pair[1]; renderCart(); });
+            controls.appendChild(b);
+        });
+        row.append(title, qty, controls); cartItemsBox.appendChild(row);
+    });
+    const total = ids.reduce((sum,id)=>sum+enquiryCart[id].quantity,0);
+    cartCountLabel.textContent = total + (total===1 ? " item selected" : " items selected");
+    selectedProductsInput.value = JSON.stringify(ids.map(id=>({id:Number(id),name:enquiryCart[id].name,quantity:enquiryCart[id].quantity})));
+}
+document.querySelectorAll(".add-cart-button").forEach(function(button){
+    button.addEventListener("click",function(){
+        const item=PRODUCTS.find(p=>Number(p.id)===Number(button.dataset.productId));
+        if(!item) return;
+        if(!enquiryCart[item.id]) enquiryCart[item.id]={name:item.name,quantity:0};
+        enquiryCart[item.id].quantity++;
+        renderCart();
+        document.getElementById("cart").scrollIntoView({behavior:"smooth"});
+    });
+});
+document.getElementById("clearCart").addEventListener("click",function(){ Object.keys(enquiryCart).forEach(k=>delete enquiryCart[k]); renderCart(); });
+renderCart();
+
+/* ================================================================
    27. CONTACT FORM FRONT-END CHECK
    ================================================================ */
 
@@ -2429,40 +2489,60 @@ document.addEventListener("DOMContentLoaded", function () {
 # ROUTE: HOME PAGE AND CONTACT FORM
 # ---------------------------------------------------------------------
 
+def init_db():
+    db = sqlite3.connect("enquiries.db")
+    db.execute("""CREATE TABLE IF NOT EXISTS enquiries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL,
+        phone TEXT NOT NULL, address TEXT NOT NULL, city TEXT NOT NULL,
+        country TEXT NOT NULL, subject TEXT NOT NULL, selected_products TEXT NOT NULL,
+        message TEXT NOT NULL
+    )""")
+    db.commit()
+    db.close()
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        email = request.form.get("email", "").strip()
-        subject = request.form.get("subject", "").strip()
-        message = request.form.get("message", "").strip()
-
-        # Basic server-side validation.
-        if not name or not email or not subject or not message:
+        fields = {key: request.form.get(key, "").strip() for key in
+                  ["name", "email", "phone", "address", "city", "country", "subject", "message"]}
+        selected_raw = request.form.get("selected_products", "[]")
+        try:
+            selected = json.loads(selected_raw)
+            if not isinstance(selected, list): raise ValueError
+        except (ValueError, TypeError):
+            selected = []
+        valid_ids = {int(p["id"]) for p in PRODUCTS}
+        clean_items = []
+        for item in selected:
+            try:
+                pid, qty = int(item.get("id")), int(item.get("quantity"))
+                if pid in valid_ids and 1 <= qty <= 1000:
+                    product = next(p for p in PRODUCTS if int(p["id"]) == pid)
+                    clean_items.append({"id": pid, "name": product["name"], "quantity": qty})
+            except (AttributeError, TypeError, ValueError):
+                continue
+        if not all(fields.values()):
             flash("Please complete all required fields.", "error")
             return redirect(url_for("home") + "#contact")
-
-        if len(name) > 100 or len(email) > 150 or len(message) > 3000:
+        if len(fields["name"]) > 100 or len(fields["email"]) > 150 or len(fields["message"]) > 3000 or len(fields["address"]) > 300:
             flash("One or more fields are too long.", "error")
             return redirect(url_for("home") + "#contact")
-
-        # Demo-only response. Connect a verified email service here.
-        # Do not claim that a message was emailed until an email provider
-        # has been configured and the send operation has succeeded.
-        flash(
-            "Thank you. The demo form has received your input. "
-            "Email delivery must be configured before launch.",
-            "success"
-        )
+        init_db()
+        db = sqlite3.connect("enquiries.db")
+        db.execute("""INSERT INTO enquiries
+            (created_at,name,email,phone,address,city,country,subject,selected_products,message)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (datetime.utcnow().isoformat(), fields["name"], fields["email"], fields["phone"],
+             fields["address"], fields["city"], fields["country"], fields["subject"],
+             json.dumps(clean_items), fields["message"]))
+        db.commit(); db.close()
+        flash("Thank you. Your enquiry has been saved successfully. The team can review it and contact you.", "success")
         return redirect(url_for("home") + "#contact")
 
-    return render_template_string(
-        PAGE,
-        company=COMPANY,
-        products=PRODUCTS,
-        categories=CATEGORIES,
-        year=datetime.now().year
-    )
+    return render_template_string(PAGE, company=COMPANY, products=PRODUCTS,
+                                  categories=CATEGORIES, year=datetime.now().year)
 
 
 # ---------------------------------------------------------------------
