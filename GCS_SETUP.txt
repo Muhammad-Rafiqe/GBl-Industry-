@@ -1,43 +1,28 @@
-GLOBAL CHEMICAL SOLUTION — ADMIN + STORE UPGRADE
+GCS WEBSITE UPDATE — FRONT PAGE CATALOGUE, CURRENCY SYMBOLS & IMAGE DISPLAY
 
-FILES
-- GCS_Admin_Store.py: upgraded single-file Flask website
+CHANGES
+1. Products added from Admin > Product manager now also appear on the public homepage under Products & solutions, not only in Shop.
+2. Homepage cards for admin-added products show their price and a Shop / Add to cart link.
+3. Currency options now show names and symbols:
+   GBP — British Pound (£)
+   USD — US Dollar ($)
+   EUR — Euro (€)
+   PKR — Pakistani Rupee (Rs)
+   The shop and admin product list show the symbol with the currency code.
+4. Product images use object-fit: contain in a larger 300px display area, so the whole uploaded image is visible instead of being cropped.
+5. Admin can replace a product image from the Edit Product page.
+6. Image uploads are limited to 8 MB and PNG/JPG/JPEG/WEBP/GIF formats.
 
-INSTALL / RUN
-1. Install Python 3.10+.
-2. Open terminal in the folder containing GCS_Admin_Store.py.
-3. Install Flask:
-   pip install Flask
-4. Set a strong admin password before first run.
-   Windows PowerShell:
-     $env:ADMIN_USERNAME="admin"
-     $env:ADMIN_PASSWORD="Use-A-Long-Unique-Password"
-     $env:FLASK_SECRET_KEY="replace-with-a-long-random-secret"
-     python GCS_Admin_Store.py
-   macOS/Linux:
-     ADMIN_USERNAME=admin ADMIN_PASSWORD='Use-A-Long-Unique-Password' FLASK_SECRET_KEY='replace-with-a-long-random-secret' python GCS_Admin_Store.py
-5. Open http://127.0.0.1:5000
-6. Shop: http://127.0.0.1:5000/shop
-7. Admin: http://127.0.0.1:5000/admin/login
-8. Customer order tracking: http://127.0.0.1:5000/order-status
+DEPLOY TO EXISTING RENDER WEBSITE
+- Replace the Python file currently used by your Render service with GCS_Admin_Store_Updated.py contents.
+- Keep the filename/module consistent with your Render Start Command. For example, if the file in GitHub is GCS_Admin_Store.py, paste this updated code into that same file and keep Start Command: gunicorn GCS_Admin_Store:app
+- Commit changes to GitHub; Render should redeploy automatically.
+- Ensure requirements include Flask and gunicorn. Example requirements.txt:
+  Flask
+  gunicorn
+- Keep ADMIN_USERNAME, ADMIN_PASSWORD and FLASK_SECRET_KEY in Render Environment settings. Do not put real passwords into public source code.
 
-FEATURES ADDED
-- Admin login with hashed password
-- Dashboard with product/order/customer totals and monthly sales chart
-- Add products with name, category, description, price, currency, stock and uploaded image
-- Edit product details, price, stock and visibility
-- Hide/show products
-- Cart and checkout order requests
-- Customer directory and customer contact details
-- Order listing, order detail, status updates and internal notes
-- Customer order tracking by order reference + checkout email
-- SQLite storage in gcs_store.db; uploads in static_uploads/
+IMPORTANT RENDER STORAGE NOTE
+The app currently saves SQLite data in gcs_store.db and uploaded files in static_uploads/. On Render instances without a persistent disk or external storage, these local files may be lost on redeploy/restart. For reliable long-term products/orders/images, attach persistent storage and configure the database/upload paths for it, or move to managed PostgreSQL plus Cloudinary/S3-compatible image storage.
 
-IMPORTANT
-- The existing enquiry form continues to store enquiries in enquiries.db.
-- The first-run demo login fallback is admin / ChangeMe-Now-2026! only if environment credentials are not set. Change credentials immediately. If admin_users has already been created, changing environment variables alone will not replace the existing database password; remove the admin user row / reset it securely before redeploying.
-- Replace FLASK_SECRET_KEY with a long random secret.
-- This is a starter app, not production-hardened: add HTTPS, CSRF protection, rate limiting, backups, privacy/retention controls, tax/shipping/payment integrations and deployment hardening before public launch. No online card payment is integrated; checkout records order requests.
-- Prices default to zero / “Price on request” until the admin sets them. Order total is marked for review when any cart item has no price.
-- Chemical sales must be independently checked for legal classification, licensing, customer eligibility, destination restrictions, transport and safety documentation.
-- The uploaded reference image shows 1,4-Butanediol (BDO). BDO/GBL/GHB are deliberately not supported as sale listings or orders; the admin catalogue blocks those product terms. Use the store for lawful, approved products only.
+The catalogue's existing restrictions on BDO/GBL/GHB remain unchanged. This update does not remove those restrictions.
