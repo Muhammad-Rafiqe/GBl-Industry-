@@ -774,15 +774,20 @@ p {
 
 .product-image {
     position: relative;
-    height: 235px;
+    height: 300px;
     overflow: hidden;
-    background: var(--pale-blue);
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .product-image img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
+    object-position: center;
+    padding: 10px;
     transition: transform 0.4s ease;
 }
 
@@ -1792,8 +1797,13 @@ p {
                 <div class="product-bottom">
                     <span>Specification on enquiry</span>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        {% if product.store_product %}
+                        <span class="product-price">{% if product.price > 0 %}{{ product.currency_symbol }} {{ '%.2f'|format(product.price) }} · {{ product.currency }}{% else %}Price on request{% endif %}</span>
+                        <a class="details-button" href="/shop">View in shop / Add to cart ↗</a>
+                        {% else %}
                         <button type="button" class="details-button" data-product-id="{{ product.id }}">View details ↗</button>
                         <button type="button" class="details-button add-cart-button" data-product-id="{{ product.id }}">Add to enquiry cart +</button>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -2543,8 +2553,15 @@ def home():
         flash("Thank you. Your enquiry has been saved successfully. The team can review it and contact you.", "success")
         return redirect(url_for("home") + "#contact")
 
-    return render_template_string(PAGE, company=COMPANY, products=PRODUCTS,
-                                  categories=CATEGORIES, year=datetime.now().year)
+    homepage_products = list(PRODUCTS)
+    try:
+        with store_db() as db:
+            rows = db.execute("SELECT * FROM store_products WHERE active=1 ORDER BY id DESC").fetchall()
+        for row in rows:
+            homepage_products.append({"id":100000+int(row["id"]), "slug":f"store-product-{row['id']}", "name":row["name"], "category":row["category"], "short":row["description"] or "Product details available on request.", "description":row["description"] or "Product details available on request.", "image":row["image"], "badge":"Available product", "specifications":[], "applications":[], "notice":"Confirm specifications and suitability before purchase.", "store_product":True, "store_id":int(row["id"]), "price":float(row["price"]), "currency":row["currency"], "currency_symbol":CURRENCY_INFO.get(row["currency"],{}).get("symbol",row["currency"]), "stock":int(row["stock"])})
+    except (sqlite3.Error, NameError):
+        pass
+    return render_template_string(PAGE, company=COMPANY, products=homepage_products, categories=CATEGORIES, year=datetime.now().year)
 
 
 # ---------------------------------------------------------------------
@@ -2594,6 +2611,11 @@ STORE_DB = os.path.join(BASE_DIR, "gcs_store.db")
 UPLOAD_DIR = os.path.join(BASE_DIR, "static_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
+CURRENCY_INFO = {'GBP': {'name':'British Pound','symbol':'£'}, 'USD': {'name':'US Dollar','symbol':'$'}, 'EUR': {'name':'Euro','symbol':'€'}, 'PKR': {'name':'Pakistani Rupee','symbol':'Rs'}}
+def money_label(code, amount=None):
+    info=CURRENCY_INFO.get(code, {'name':code,'symbol':code})
+    return f"{info['symbol']} {amount:,.2f} ({info['name']})" if amount is not None else f"{info['name']} ({info['symbol']})"
 # BDO/GBL/GHB are intentionally excluded from this storefront.
 RESTRICTED_TERMS = ("1,4-butanediol", "1,4 butanediol", "butanediol", "bdo", "gbl", "gamma-butyrolactone", "ghb")
 
@@ -2668,7 +2690,7 @@ def blocked_catalogue_item(name, description=''):
 ADMIN_STYLE = """
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:#172b40;font:15px Arial,sans-serif}
-a{color:#1768a5;text-decoration:none}.top{background:#10243b;color:white;padding:17px 5%;display:flex;justify-content:space-between;align-items:center}.wrap{width:min(1180px,92%);margin:28px auto}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:15px}.card,.panel{background:white;padding:20px;border-radius:12px;box-shadow:0 5px 22px #10243b12;margin-bottom:18px}.metric{font-size:28px;font-weight:bold;margin-top:8px}.muted{color:#718096}.btn,button{border:0;border-radius:7px;background:#1768a5;color:white;padding:10px 15px;cursor:pointer;display:inline-block}.btn.secondary{background:#64748b}.btn.danger{background:#b42332}input,textarea,select{width:100%;padding:11px;border:1px solid #d7e0e8;border-radius:7px;margin:5px 0 13px}label{font-weight:bold;font-size:13px}table{width:100%;border-collapse:collapse;background:white}th,td{text-align:left;padding:12px;border-bottom:1px solid #e7edf2}th{background:#f7f9fb}.table-wrap{overflow:auto}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.actions{display:flex;gap:8px;flex-wrap:wrap}.product-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}.product img{width:100%;height:175px;object-fit:cover;border-radius:8px}.price{font-size:21px;font-weight:bold}.nav{display:flex;gap:16px;flex-wrap:wrap}.notice{padding:12px;background:#fff4df;border-radius:8px;margin:12px 0}@media(max-width:650px){.row{grid-template-columns:1fr}.top{align-items:flex-start;gap:12px;flex-direction:column}th,td{padding:8px}}
+a{color:#1768a5;text-decoration:none}.top{background:#10243b;color:white;padding:17px 5%;display:flex;justify-content:space-between;align-items:center}.wrap{width:min(1180px,92%);margin:28px auto}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:15px}.card,.panel{background:white;padding:20px;border-radius:12px;box-shadow:0 5px 22px #10243b12;margin-bottom:18px}.metric{font-size:28px;font-weight:bold;margin-top:8px}.muted{color:#718096}.btn,button{border:0;border-radius:7px;background:#1768a5;color:white;padding:10px 15px;cursor:pointer;display:inline-block}.btn.secondary{background:#64748b}.btn.danger{background:#b42332}input,textarea,select{width:100%;padding:11px;border:1px solid #d7e0e8;border-radius:7px;margin:5px 0 13px}label{font-weight:bold;font-size:13px}table{width:100%;border-collapse:collapse;background:white}th,td{text-align:left;padding:12px;border-bottom:1px solid #e7edf2}th{background:#f7f9fb}.table-wrap{overflow:auto}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.actions{display:flex;gap:8px;flex-wrap:wrap}.product-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}.product img{width:100%;height:300px;object-fit:contain;object-position:center;background:#fff;border-radius:8px;padding:8px}.price{font-size:21px;font-weight:bold}.nav{display:flex;gap:16px;flex-wrap:wrap}.notice{padding:12px;background:#fff4df;border-radius:8px;margin:12px 0}@media(max-width:650px){.row{grid-template-columns:1fr}.top{align-items:flex-start;gap:12px;flex-direction:column}th,td{padding:8px}}
 </style>"""
 
 
@@ -2684,10 +2706,10 @@ def shop():
     <h1>Product catalogue</h1><p class='muted'>Add approved catalogue products to your cart. Checkout creates an order request for review.</p>
     <div class='product-grid'>{% for p in products %}<article class='card product'>
     {% if p.image %}<img src='{{p.image}}' alt='{{p.name}}'>{% endif %}<h3>{{p.name}}</h3><p class='muted'>{{p.category}}</p><p>{{p.description}}</p>
-    <div class='price'>{% if p.price > 0 %}{{p.currency}} {{'%.2f'|format(p.price)}}{% else %}Price on request{% endif %}</div>
+    <div class='price'>{% if p.price > 0 %}{{currency_symbols.get(p.currency, p.currency)}} {{'%.2f'|format(p.price)}} <small>({{p.currency}})</small>{% else %}Price on request{% endif %}</div>
     <p class='muted'>Stock shown: {{p.stock}}</p><form method='post' action='/cart/add'><input type='hidden' name='product_id' value='{{p.id}}'><label>Quantity</label><input name='quantity' type='number' min='1' max='50' value='1'><button>Add to cart</button></form></article>{% endfor %}</div>
     <section class='panel'><h2>Your cart</h2>{% if cart %}<form method='post' action='/cart/update'>{% for item in cart %}<p>{{item.name}} — {{item.quantity}} × {{item.price_label}} <button class='btn danger' name='remove' value='{{item.id}}'>Remove</button></p>{% endfor %}<button class='btn secondary'>Update cart</button></form><h3>Estimated total: {{total}}</h3><a class='btn' href='/checkout'>Proceed to checkout</a>{% else %}<p>Your cart is empty.</p>{% endif %}</section>
-    """, products=products, cart=cart_view(), total=cart_total())
+    """, products=products, cart=cart_view(), total=cart_total(), currency_symbols={k:v['symbol'] for k,v in CURRENCY_INFO.items()})
 
 
 def cart_view():
@@ -2699,14 +2721,14 @@ def cart_view():
     result=[]
     for p in rows:
         q=max(1,min(50,int(cart.get(str(p['id']),1))))
-        result.append({'id':p['id'],'name':p['name'],'quantity':q,'price':p['price'],'price_label':(p['currency']+' '+format(p['price'],'.2f')) if p['price']>0 else 'Price on request'})
+        result.append({'id':p['id'],'name':p['name'],'quantity':q,'price':p['price'],'currency':p['currency'],'price_label':money_label(p['currency'],p['price']) if p['price']>0 else 'Price on request'})
     return result
 
 
 def cart_total():
     items=cart_view()
     if not items or any(i['price'] <= 0 for i in items): return 'Confirmed after enquiry'
-    return 'GBP ' + format(sum(i['price']*i['quantity'] for i in items), '.2f')
+    return money_label(items[0]['currency'],sum(i['price']*i['quantity'] for i in items))
 
 
 @app.post('/cart/add')
@@ -2819,9 +2841,9 @@ def admin_products():
         flash('Product added.','success'); return redirect('/admin/products')
     with store_db() as db: products=db.execute('SELECT * FROM store_products ORDER BY id DESC').fetchall()
     return page('Product manager',"""
-    <h1>Product manager</h1><div class='panel'><h2>Add product</h2><form method='post' enctype='multipart/form-data'><div class='row'><div><label>Product name</label><input name='name' required><label>Category</label><input name='category' required></div><div><label>Price</label><input type='number' name='price' min='0' step='.01' value='0' required><label>Currency</label><select name='currency'><option>GBP</option><option>USD</option><option>EUR</option><option>PKR</option></select></div></div><label>Description</label><textarea name='description'></textarea><div class='row'><div><label>Stock quantity</label><input type='number' name='stock' min='0' value='0'></div><div><label>Image upload</label><input type='file' name='image' accept='.png,.jpg,.jpeg,.webp,.gif'><label>Or image URL</label><input name='image_url'></div></div><button>Add product to shop</button></form></div>
-    <div class='panel'><h2>Current products</h2><div class='table-wrap'><table><tr><th>Product</th><th>Price</th><th>Stock</th><th>Visibility</th><th>Actions</th></tr>{% for p in products %}<tr><td>{{p.name}}<br><small>{{p.category}}</small></td><td>{{p.currency}} {{'%.2f'|format(p.price)}}</td><td>{{p.stock}}</td><td>{{'Active' if p.active else 'Hidden'}}</td><td><a href='/admin/products/{{p.id}}/edit'>Edit</a> · <form style='display:inline' method='post' action='/admin/products/{{p.id}}/toggle'><button class='btn secondary'>{{'Hide' if p.active else 'Show'}}</button></form></td></tr>{% endfor %}</table></div></div>
-    """,products=products)
+    <h1>Product manager</h1><div class='panel'><h2>Add product</h2><form method='post' enctype='multipart/form-data'><div class='row'><div><label>Product name</label><input name='name' required><label>Category</label><input name='category' required></div><div><label>Price</label><input type='number' name='price' min='0' step='.01' value='0' required><label>Currency</label><select name='currency'><option value="GBP">GBP — British Pound (£)</option><option value="USD">USD — US Dollar ($)</option><option value="EUR">EUR — Euro (€)</option><option value="PKR">PKR — Pakistani Rupee (Rs)</option></select></div></div><label>Description</label><textarea name='description'></textarea><div class='row'><div><label>Stock quantity</label><input type='number' name='stock' min='0' value='0'></div><div><label>Image upload</label><input type='file' name='image' accept='.png,.jpg,.jpeg,.webp,.gif'><label>Or image URL</label><input name='image_url'></div></div><button>Add product to shop</button></form></div>
+    <div class='panel'><h2>Current products</h2><div class='table-wrap'><table><tr><th>Product</th><th>Price</th><th>Stock</th><th>Visibility</th><th>Actions</th></tr>{% for p in products %}<tr><td>{{p.name}}<br><small>{{p.category}}</small></td><td>{{currency_symbols.get(p.currency, p.currency)}} {{'%.2f'|format(p.price)}} <small>({{p.currency}})</small></td><td>{{p.stock}}</td><td>{{'Active' if p.active else 'Hidden'}}</td><td><a href='/admin/products/{{p.id}}/edit'>Edit</a> · <form style='display:inline' method='post' action='/admin/products/{{p.id}}/toggle'><button class='btn secondary'>{{'Hide' if p.active else 'Show'}}</button></form></td></tr>{% endfor %}</table></div></div>
+    """,products=products,currency_symbols={k:v['symbol'] for k,v in CURRENCY_INFO.items()})
 
 
 @app.route('/admin/products/<int:pid>/edit',methods=['GET','POST'])
@@ -2834,9 +2856,14 @@ def admin_product_edit(pid):
         if not name or blocked_catalogue_item(name,desc): flash('Invalid product details.','error'); return redirect(request.url)
         try: price=max(0,float(request.form.get('price','0'))); stock=max(0,int(request.form.get('stock','0')))
         except ValueError: flash('Invalid price or stock.','error'); return redirect(request.url)
-        with store_db() as db: db.execute('UPDATE store_products SET name=?,category=?,description=?,price=?,currency=?,stock=?,active=? WHERE id=?',(name,request.form.get('category','').strip(),desc,price,request.form.get('currency','GBP'),stock,1 if request.form.get('active')=='1' else 0,pid))
+        image_url=product['image']; file=request.files.get('image')
+        if file and file.filename:
+            filename=secure_filename(file.filename); ext=filename.rsplit('.',1)[-1].lower() if '.' in filename else ''
+            if ext not in ALLOWED_IMAGE_EXTENSIONS: flash('Image must be PNG, JPG, WEBP or GIF.','error'); return redirect(request.url)
+            filename=secrets.token_hex(8)+'_'+filename; file.save(os.path.join(UPLOAD_DIR,filename)); image_url='/static_uploads/'+filename
+        with store_db() as db: db.execute('UPDATE store_products SET name=?,category=?,description=?,price=?,currency=?,stock=?,active=?,image=? WHERE id=?',(name,request.form.get('category','').strip(),desc,price,request.form.get('currency','GBP'),stock,1 if request.form.get('active')=='1' else 0,image_url,pid))
         flash('Product updated.','success'); return redirect('/admin/products')
-    return page('Edit product',"""<h1>Edit product</h1><form class='panel' method='post'><label>Name</label><input name='name' value='{{p.name}}' required><label>Category</label><input name='category' value='{{p.category}}'><label>Description</label><textarea name='description'>{{p.description}}</textarea><div class='row'><div><label>Price</label><input name='price' type='number' step='.01' min='0' value='{{p.price}}'></div><div><label>Currency</label><select name='currency'><option>{{p.currency}}</option><option>GBP</option><option>USD</option><option>EUR</option><option>PKR</option></select></div></div><label>Stock</label><input name='stock' type='number' min='0' value='{{p.stock}}'><label>Visibility</label><select name='active'><option value='1' {{'selected' if p.active else ''}}>Active</option><option value='0' {{'selected' if not p.active else ''}}>Hidden</option></select><button>Save changes</button></form>""",p=product)
+    return page('Edit product',"""<h1>Edit product</h1><form class='panel' method='post' enctype='multipart/form-data'><label>Name</label><input name='name' value='{{p.name}}' required><label>Category</label><input name='category' value='{{p.category}}'><label>Description</label><textarea name='description'>{{p.description}}</textarea><div class='row'><div><label>Price</label><input name='price' type='number' step='.01' min='0' value='{{p.price}}'></div><div><label>Currency</label><select name='currency'><option value="{{p.currency}}">{{p.currency}}</option><option value="GBP">GBP — British Pound (£)</option><option value="USD">USD — US Dollar ($)</option><option value="EUR">EUR — Euro (€)</option><option value="PKR">PKR — Pakistani Rupee (Rs)</option></select></div></div><label>Stock</label><input name='stock' type='number' min='0' value='{{p.stock}}'><label>Replace product image (optional)</label><input type='file' name='image' accept='.png,.jpg,.jpeg,.webp,.gif'>{% if p.image %}<img src='{{p.image}}' style='width:100%;max-height:300px;object-fit:contain;background:#fff'>{% endif %}<label>Visibility</label><select name='active'><option value='1' {{'selected' if p.active else ''}}>Active</option><option value='0' {{'selected' if not p.active else ''}}>Hidden</option></select><button>Save changes</button></form>""",p=product)
 
 
 @app.post('/admin/products/<int:pid>/toggle')
